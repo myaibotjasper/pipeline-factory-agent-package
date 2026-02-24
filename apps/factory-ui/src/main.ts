@@ -71,7 +71,7 @@ if (mode === 'wallboard') {
 // Laptop/mobile interaction
 let selectedStation: string | null = null;
 const prCardEl = document.createElement('div');
-prCardEl.className = 'pill';
+prCardEl.className = mode === 'mobile' ? 'pill compact' : 'pill';
 prCardEl.style.position = 'absolute';
 prCardEl.style.right = '12px';
 prCardEl.style.bottom = '12px';
@@ -171,6 +171,36 @@ connectEventStream({
           }
         })
         .catch(() => {});
+    }
+
+    // event-driven routing (greybox)
+    if (ev.type === 'CODE_PUSHED') {
+      const n = Math.min(10, Math.max(3, Number((ev.meta as any)?.commit_count ?? 5)));
+      scene.flow.spawnCrateBurst('RECEIVING_DOCK', 'ASSEMBLY_LINE', n);
+    }
+
+    if (ev.type === 'PR_OPENED' || ev.type === 'PR_UPDATED') {
+      scene.flow.routeModule('RECEIVING_DOCK', 'BLUEPRINT_LOFT', ev.status);
+    }
+
+    if (ev.type === 'PR_CLOSED') {
+      const merged = !!(ev.meta as any)?.merged;
+      if (merged) scene.flow.routeModule('BLUEPRINT_LOFT', 'LAUNCH_BAY', 'success');
+    }
+
+    if (ev.type === 'CI_STARTED') {
+      scene.flow.routeModule('ASSEMBLY_LINE', 'QA_GATE', 'info');
+    }
+
+    if (ev.type === 'CI_COMPLETED') {
+      const ok = ev.status === 'success';
+      scene.flow.qaResult(ok);
+      if (ok) scene.flow.routeModule('QA_GATE', 'LAUNCH_BAY', ev.status);
+      else scene.flow.routeModule('QA_GATE', 'ASSEMBLY_LINE', 'failure');
+    }
+
+    if (ev.type === 'RELEASE_PUBLISHED') {
+      scene.flow.launchRocket();
     }
 
     if (ev.station_hint) {

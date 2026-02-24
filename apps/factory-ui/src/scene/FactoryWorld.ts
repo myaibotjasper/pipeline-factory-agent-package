@@ -35,11 +35,20 @@ function stationBlock(color: number) {
 
   // conveyor
   const belt = new THREE.Mesh(
-    new THREE.BoxGeometry(12, 0.3, 1.8),
+    new THREE.BoxGeometry(12, 0.32, 1.9),
     new THREE.MeshStandardMaterial({ color: 0x0b1024, metalness: 0.1, roughness: 0.9 })
   );
   belt.position.set(0, 0.18, -3.6);
   g.add(belt);
+
+  // conveyor chevrons (pure greybox readability)
+  const chevronMat = new THREE.MeshStandardMaterial({ color: 0x223b66, emissive: 0x223b66, emissiveIntensity: 0.25, roughness: 0.9 });
+  for (let i = 0; i < 6; i++) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.25), chevronMat);
+    c.position.set(-5.0 + i * 2.0, 0.35, -3.6);
+    c.rotation.y = 0.35;
+    g.add(c);
+  }
 
   return g;
 }
@@ -68,10 +77,25 @@ export class FactoryWorld {
       group.userData.stationId = d.id;
       group.userData.clickable = true;
 
-      // anchor for camera
+      // anchor for camera (visible marker)
       const anchor = new THREE.Object3D();
       anchor.position.set(d.pos.x, 8.5, d.pos.z + 14);
       anchor.userData.stationId = d.id;
+
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 4.0, 10),
+        new THREE.MeshStandardMaterial({ color: 0x2a3a6a, emissive: 0x2a3a6a, emissiveIntensity: 0.2, roughness: 0.95 })
+      );
+      pole.position.set(0, -2.0, 0);
+      anchor.add(pole);
+
+      const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 14, 14),
+        new THREE.MeshStandardMaterial({ color: d.color, emissive: d.color, emissiveIntensity: 0.55, metalness: 0.2, roughness: 0.6 })
+      );
+      bulb.position.set(0, 0.2, 0);
+      anchor.add(bulb);
+
       this.scene.add(anchor);
 
       this.scene.add(group);

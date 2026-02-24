@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FactoryWorld, type StationId } from './FactoryWorld';
 import { CameraRig } from './controls/CameraRig';
 import { ModuleLayer } from './ModuleLayer';
+import { FlowLayer } from './FlowLayer';
 
 export function bootScene(container: HTMLElement) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -32,6 +33,9 @@ export function bootScene(container: HTMLElement) {
   scene.add(floor);
 
   const world = new FactoryWorld(scene);
+
+  const flow = new FlowLayer(world.stationById);
+  scene.add(flow.group);
 
   // modules live near blueprint loft
   const blueprint = world.stationById.get('BLUEPRINT_LOFT');
@@ -76,6 +80,7 @@ export function bootScene(container: HTMLElement) {
     t0 = t;
 
     rig.tick(dt);
+    flow.tick(dt);
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
@@ -99,5 +104,6 @@ export function bootScene(container: HTMLElement) {
     flashStation(id: StationId, ok: boolean) {
       world.flashStation(id, ok);
     },
+    flow,
   };
 }
