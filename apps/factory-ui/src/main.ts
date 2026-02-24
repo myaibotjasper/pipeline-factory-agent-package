@@ -9,21 +9,96 @@ import { setConn, setDisconnectedOverlay, renderEventFeed } from './ui/Overlay';
 
 const app = document.getElementById('app')!;
 const kpisEl = document.getElementById('kpis')!;
+const stationsEl = document.getElementById('stations');
 const connEl = document.getElementById('conn')!;
 const feedEl = document.getElementById('feed')!;
 const overlayEl = document.getElementById('overlay')!;
 
 const state = new FactoryState();
 const mode = detectMode();
+document.body.dataset.mode = mode;
+if (mode === 'mobile') kpisEl.classList.add('compact');
+if (mode === 'wallboard') kpisEl.classList.add('wallboard');
 const scene = bootScene(app, mode);
+
+let lightingResetTimer: number | null = null;
+function setLighting(mode: 'normal' | 'incident' | 'celebration', holdMs: number) {
+  scene.setLightingMode(mode);
+  if (lightingResetTimer != null) window.clearTimeout(lightingResetTimer);
+  if (mode !== 'normal') {
+    lightingResetTimer = window.setTimeout(() => scene.setLightingMode('normal'), holdMs);
+  } else {
+    lightingResetTimer = null;
+  }
+}
 
 function renderKpis() {
   const k = state.kpis;
+
+  if (mode === 'wallboard') {
+    kpisEl.innerHTML = `
+      <div class="kpiBig"><div class="label">OPEN PRs</div><div class="value">${k.open_prs}</div></div>
+      <div class="kpiBig"><div class="label">FAILING</div><div class="value">${k.failing_checks}</div></div>
+      <div class="kpiBig"><div class="label">LAST RELEASE</div><div class="value tag">${k.last_release ?? '-'}</div></div>
+      <div class="kpiBig"><div class="label">AVG CI</div><div class="value">${k.avg_ci_duration_ms ?? '-'}<span class="unit">ms</span></div></div>
+    `;
+    return;
+  }
+
+  if (mode === 'mobile') {
+    kpisEl.innerHTML = `
+      <div class="small">PRs <b>${k.open_prs}</b></div>
+      <div class="small">fail <b>${k.failing_checks}</b></div>
+      <div class="small">rel <b>${k.last_release ?? '-'}</b></div>
+      <div class="small">CI <b>${k.avg_ci_duration_ms ?? '-'}</b>ms</div>
+    `;
+    return;
+  }
+
+  // laptop
   kpisEl.innerHTML = `
     <div class="small">open PRs: <b>${k.open_prs}</b></div>
     <div class="small">failing checks: <b>${k.failing_checks}</b></div>
     <div class="small">last release: <b>${k.last_release ?? '-'}</b></div>
     <div class="small">avg CI: <b>${k.avg_ci_duration_ms ?? '-'}ms</b></div>
+  `;
+}
+
+function renderStations() {
+  if (!stationsEl) return;
+  if (mode !== 'laptop') {
+    stationsEl.innerHTML = '';
+    return;
+  }
+
+  const zones = [
+    'RECEIVING_DOCK',
+    'BLUEPRINT_LOFT',
+    'ASSEMBLY_LINE',
+    'QA_GATE',
+    'LAUNCH_BAY',
+    'CONTROL_ROOM',
+  ] as const;
+
+  const mods = Array.isArray(state.modules) ? state.modules : [];
+
+  function zoneStatus(z: string): 'failure' | 'warning' | 'info' | 'success' | 'idle' {
+    const inZone = mods.filter((m) => m.zone === z);
+    if (!inZone.length) return 'idle';
+    if (inZone.some((m) => m.status === 'failure')) return 'failure';
+    if (inZone.some((m) => m.status === 'warning')) return 'warning';
+    if (inZone.some((m) => m.status === 'info')) return 'info';
+    return 'success';
+  }
+
+  stationsEl.innerHTML = `
+    <div style="font-weight:700; margin-bottom:6px;">Stations</div>
+    ${zones
+      .map((z) => {
+        const st = zoneStatus(z);
+        return `<div class="stationRow ${st}"><span class="name">${z.replace(/_/g, ' ')}</span><span class="st">${st}</span></div>`;
+      })
+      .join('')}
   `;
 }
 
@@ -35,6 +110,7 @@ function renderFeed() {
 }
 
 renderKpis();
+renderStations();
 renderFeed();
 
 const hubHost = import.meta.env.VITE_HUB_HOST || window.location.hostname;
@@ -48,6 +124,7 @@ fetch(`${hubHttp}/state`, { cache: 'no-store' })
     if (!snap) return;
     state.applySnapshot(snap);
     renderKpis();
+    renderStations();
     renderFeed();
     if (Array.isArray(snap.modules)) {
       scene.moduleLayer.upsertMany(snap.modules);
@@ -156,9 +233,20 @@ connectEventStream({
   onEvent: (ev) => {
     state.applyEvent(ev);
     renderKpis();
+    renderStations();
     renderFeed();
 
     scene.robots.onEvent(ev);
+
+    // lighting modes
+    if (ev.type === 'CI_COMPLETED' && ev.status === 'failure') {
+      setLighting('incident', 12000);
+    } else if (ev.type === 'RELEASE_PUBLISHED') {
+      setLighting('celebration', 15000);
+    } else if (ev.type === 'CI_COMPLETED' && ev.status === 'success') {
+      // settle back to normal quickly after a good run
+      setLighting('normal', 0);
+    }
 
     // keep module layer in sync (cheap: refresh from hub periodically would be better; for MVP we refetch snapshot)
     if (ev.type.startsWith('PR_') || ev.type === 'RELEASE_PUBLISHED') {
@@ -168,6 +256,7 @@ connectEventStream({
           if (!snap) return;
           if (Array.isArray(snap.modules)) {
             state.modules = snap.modules;
+            renderStations();
             scene.moduleLayer.upsertMany(snap.modules);
           }
         })

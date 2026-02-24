@@ -6,6 +6,7 @@ import { FlowLayer } from './FlowLayer';
 import type { UIMode } from '../ui/modes/mode';
 import { RobotController } from './robots/RobotController';
 import { ROBOT_SPECS } from './robots/RobotSpecs';
+import { LightingController, type LightingMode } from './LightingController';
 
 export function bootScene(container: HTMLElement, mode: UIMode) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -27,6 +28,8 @@ export function bootScene(container: HTMLElement, mode: UIMode) {
   const dir = new THREE.DirectionalLight(0xffffff, 0.9);
   dir.position.set(10, 18, 10);
   scene.add(dir);
+
+  const lighting = new LightingController({ scene, hemi, dir });
 
   const floorGeo = new THREE.PlaneGeometry(120, 70);
   const floorMat = new THREE.MeshStandardMaterial({ color: 0x071022, metalness: 0.2, roughness: 0.9 });
@@ -80,15 +83,82 @@ export function bootScene(container: HTMLElement, mode: UIMode) {
   resize();
   window.addEventListener('resize', resize, { passive: true });
 
+  // --- Dynamic degradation ladder (minimal) ---
+  // 0: full, 1: reduce particles, 2: disable shadows/postprocessing (if any), 3: reduce robots
+  let qualityLevel = 0;
+  const baseRobotCount = robots.getActiveLimit();
+
+  function applyQuality() {
+    if (qualityLevel <= 0) {
+      flow.setQuality({ particleScale: 1.0, maxItems: 140 });
+      // no postprocessing in this project, but ensure renderer stays lean
+      renderer.shadowMap.enabled = false;
+      robots.setActiveLimit(baseRobotCount);
+      return;
+    }
+
+    if (qualityLevel === 1) {
+      flow.setQuality({ particleScale: 0.55, maxItems: 90 });
+      renderer.shadowMap.enabled = false;
+      robots.setActiveLimit(baseRobotCount);
+      return;
+    }
+
+    if (qualityLevel === 2) {
+      flow.setQuality({ particleScale: 0.35, maxItems: 70 });
+      renderer.shadowMap.enabled = false;
+      // (postprocessing: none)
+      robots.setActiveLimit(baseRobotCount);
+      return;
+    }
+
+    flow.setQuality({ particleScale: 0.25, maxItems: 55 });
+    renderer.shadowMap.enabled = false;
+    robots.setActiveLimit(Math.max(4, Math.floor(baseRobotCount * 0.6)));
+  }
+  applyQuality();
+
+  // basic perf sampling (EMA of dt)
   let t0 = performance.now();
+  let emaDt = 1 / 60;
+  let slowFor = 0;
+  let fastFor = 0;
+
   function tick() {
     const t = performance.now();
     const dt = (t - t0) / 1000;
     t0 = t;
 
-    rig.tick(dt);
-    flow.tick(dt);
-    robots.tick(dt);
+    // clamp to avoid tab-sleep spikes causing instant degradation
+    const dtClamped = Math.min(0.2, Math.max(0, dt));
+    emaDt = emaDt * 0.92 + dtClamped * 0.08;
+
+    // thresholds: degrade if ~<30fps sustained, recover if ~>45fps sustained
+    if (emaDt > 1 / 30) {
+      slowFor += dtClamped;
+      fastFor = 0;
+    } else if (emaDt < 1 / 45) {
+      fastFor += dtClamped;
+      slowFor = 0;
+    }
+
+    if (slowFor > 2.0 && qualityLevel < 3) {
+      qualityLevel += 1;
+      slowFor = 0;
+      fastFor = 0;
+      applyQuality();
+    }
+
+    if (fastFor > 6.0 && qualityLevel > 0) {
+      qualityLevel -= 1;
+      slowFor = 0;
+      fastFor = 0;
+      applyQuality();
+    }
+
+    rig.tick(dtClamped);
+    flow.tick(dtClamped);
+    robots.tick(dtClamped);
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
@@ -100,6 +170,10 @@ export function bootScene(container: HTMLElement, mode: UIMode) {
     world,
     moduleLayer,
     robots,
+    lighting,
+    setLightingMode(m: LightingMode) {
+      lighting.setMode(m);
+    },
     onPointer(ev: PointerEvent) {
       return pickStation(ev);
     },

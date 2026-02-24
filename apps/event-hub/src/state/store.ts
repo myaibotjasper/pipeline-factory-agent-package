@@ -1,4 +1,5 @@
 import type { CanonicalEvent } from '../github/normalize.js';
+import { computeKpis } from './kpis.js';
 
 export type Module = {
   key: string;
@@ -62,30 +63,11 @@ export class Store {
   snapshot(): StateSnapshot {
     const recent = [...this.events].slice(-this.maxEvents);
 
-    // KPIs (minimal)
-    let open_prs = 0;
-    let failing_checks = 0;
-    let last_release: string | null = null;
-    let avg_ci_duration_ms: number | null = null;
-    let durSum = 0;
-    let durN = 0;
-
-    for (const ev of recent) {
-      if (ev.type === 'PR_OPENED') open_prs += 1;
-      if (ev.type === 'PR_CLOSED' && ev.status === 'success') open_prs = Math.max(0, open_prs - 1);
-      if (ev.type === 'CI_COMPLETED' && ev.status === 'failure') failing_checks += 1;
-      if (ev.type === 'RELEASE_PUBLISHED') last_release = ev.entity.key;
-      const d = (ev.meta as any)?.duration_ms;
-      if (ev.type === 'CI_COMPLETED' && typeof d === 'number') {
-        durSum += d;
-        durN += 1;
-      }
-    }
-    if (durN) avg_ci_duration_ms = Math.round(durSum / durN);
+    const kpis = computeKpis(recent);
 
     return {
       ts: Date.now(),
-      kpis: { open_prs, failing_checks, last_release, avg_ci_duration_ms },
+      kpis,
       modules: Array.from(this.modules.values()).sort((a, b) => b.updated_ts - a.updated_ts).slice(0, 200),
       recent,
     };

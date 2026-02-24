@@ -20,6 +20,13 @@ export function connectEventStream(opts: {
   let ws: WebSocket | null = null;
   let stopped = false;
   let attempt = 0;
+  let reconnectTimer: number | null = null;
+
+  function clearReconnectTimer() {
+    if (reconnectTimer == null) return;
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 
   function nextDelayMs() {
     // 0.5s → 8s exponential with jitter
@@ -28,28 +35,56 @@ export function connectEventStream(opts: {
     return Math.round(base + jitter);
   }
 
+  function scheduleReconnect() {
+    if (stopped) return;
+    clearReconnectTimer();
+
+    // if the device is offline, don't hammer reconnect; wait for 'online'
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      onStatus('disconnected');
+      return;
+    }
+
+    attempt += 1;
+    reconnectTimer = window.setTimeout(() => start(), nextDelayMs());
+  }
+
   function start() {
+    if (stopped) return;
+    clearReconnectTimer();
+
+    // hard reset old socket if any
+    try {
+      ws?.close();
+    } catch {}
+    ws = null;
+
     onStatus('connecting');
+
     try {
       ws = new WebSocket(wsUrl);
+
       ws.onopen = () => {
         if (stopped) return;
         attempt = 0;
         onStatus('connected');
       };
+
       ws.onclose = () => {
         if (stopped) return;
         onStatus('disconnected');
-        attempt += 1;
-        setTimeout(() => start(), nextDelayMs());
+        scheduleReconnect();
       };
+
       ws.onerror = () => {
         if (stopped) return;
         onStatus('disconnected');
         try {
           ws?.close();
         } catch {}
+        scheduleReconnect();
       };
+
       ws.onmessage = (msg) => {
         if (stopped) return;
         try {
@@ -57,24 +92,44 @@ export function connectEventStream(opts: {
           if (data?.type === 'hello') return;
           // minimal shape validation
           if (!data || typeof data !== 'object') return;
-          if (typeof data.type !== 'string' || typeof data.ts !== 'number') return;
-          onEvent(data);
+          if (typeof (data as any).type !== 'string' || typeof (data as any).ts !== 'number') return;
+          onEvent(data as CanonicalEvent);
         } catch {
           // ignore
         }
       };
     } catch {
       onStatus('disconnected');
-      attempt += 1;
-      setTimeout(() => start(), nextDelayMs());
+      scheduleReconnect();
     }
   }
+
+  function onOnline() {
+    if (stopped) return;
+    // fast-path reconnect when network comes back
+    attempt = 0;
+    start();
+  }
+
+  function onVisibility() {
+    if (stopped) return;
+    if (document.visibilityState === 'visible') {
+      // if we got stuck in a backgrounded close, attempt to reconnect
+      start();
+    }
+  }
+
+  window.addEventListener('online', onOnline);
+  document.addEventListener('visibilitychange', onVisibility);
 
   start();
 
   return {
     stop() {
       stopped = true;
+      clearReconnectTimer();
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
       try {
         ws?.close();
       } catch {}

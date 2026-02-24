@@ -36,6 +36,7 @@ export class RobotController {
 
   private robots: RobotInstance[] = [];
   private stationById: Map<StationId, Station>;
+  private activeLimit = Infinity;
 
   constructor(opts: {
     stationById: Map<StationId, Station>;
@@ -106,6 +107,16 @@ export class RobotController {
         accent,
       });
     }
+
+    this.activeLimit = this.robots.length;
+  }
+
+  setActiveLimit(n: number) {
+    this.activeLimit = Math.max(0, Math.floor(n));
+  }
+
+  getActiveLimit() {
+    return this.activeLimit;
   }
 
   private accentForZone(z: StationId): number {
@@ -128,7 +139,11 @@ export class RobotController {
   }
 
   tick(dt: number) {
-    for (const r of this.robots) {
+    for (let i = 0; i < this.robots.length; i++) {
+      const r = this.robots[i];
+      const active = i < this.activeLimit;
+      if (r.parts.root.visible !== active) r.parts.root.visible = active;
+      if (!active) continue;
       r.stateT += dt;
       const t = r.stateT;
 

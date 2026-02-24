@@ -13,6 +13,26 @@
       .pill.compact .small { font-size: 11px; }
       .kpis { display: flex; gap: 10px; flex-wrap: wrap; }
       .small { opacity: 0.85; font-size: 12px; }
+      #stations { position: absolute; left: 12px; top: 58px; width: min(320px, 92vw); pointer-events: none; display:none; }
+      body[data-mode="laptop"] #stations { display: block; }
+      .stationRow { display:flex; justify-content:space-between; gap:10px; margin: 4px 0; font-size: 12px; opacity: 0.95; }
+      .stationRow .st { opacity: 0.8; }
+      .stationRow.failure { color: #ff7b7b; }
+      .stationRow.warning { color: #ffe27b; }
+      .stationRow.success { color: #7bffb2; }
+      .stationRow.idle { color: rgba(255,255,255,0.65); }
+
+      /* wallboard KPI blocks */
+      body[data-mode="wallboard"] #hud { top: 18px; left: 18px; right: 18px; }
+      body[data-mode="wallboard"] .kpis { gap: 14px; }
+      .kpiBig { min-width: 170px; }
+      .kpiBig .label { font-size: 11px; opacity: 0.8; letter-spacing: 0.08em; }
+      .kpiBig .value { font-size: 28px; font-weight: 800; margin-top: 2px; }
+      .kpiBig .value.tag { font-size: 22px; }
+      .kpiBig .unit { font-size: 12px; opacity: 0.75; margin-left: 4px; font-weight: 600; }
+
+      body[data-mode="mobile"] #hud .pill:first-child { display:none; }
+      body[data-mode="mobile"] #feed { width: min(520px, 95vw); }
       #overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(7,10,18,0.65); backdrop-filter: blur(6px); pointer-events: none; }
       #overlay .box { pointer-events: none; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.45); }
       #feed { position: absolute; left: 12px; bottom: 12px; width: min(420px, 95vw); pointer-events: none; }
@@ -31,6 +51,7 @@
         <div class="kpis pill" id="kpis"></div>
         <div class="pill small" id="conn">CONNECTING</div>
       </div>
+      <div id="stations" class="pill"></div>
       <div id="feed" class="pill"></div>
       <div id="overlay">
         <div class="box">

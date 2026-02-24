@@ -46,6 +46,42 @@ Mode selection:
 - Laptop: `http://192.168.200.25:3010/?mode=laptop`
 - Mobile: `http://192.168.200.25:3010/?mode=mobile`
 
+## Ops runbook (basic)
+
+### Restart (dev)
+
+From repo root:
+
+```bash
+# Event hub (port 8080)
+cd apps/event-hub && npm run dev
+
+# Factory UI (port 3010)
+cd ../factory-ui && npm run dev
+```
+
+### Restart (production-style)
+
+```bash
+# Build everything
+cd /path/to/pipeline-factory-agent-package
+npm run build
+
+# Start event hub
+cd apps/event-hub
+npm run start
+
+# Serve UI build (Vite preview)
+cd ../factory-ui
+npm run preview
+```
+
+### Logs
+
+- **Event hub:** stdout/stderr of the node process (or your process manager)
+  - If using systemd: `journalctl -u <service-name> -f`
+- **Factory UI:** browser console (client-side)
+
 ## Phase 2 verification checklist
 
 Greybox world:

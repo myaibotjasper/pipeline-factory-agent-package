@@ -29,7 +29,16 @@ export class FlowLayer {
   private items: FlowItem[] = [];
   private tmp = new THREE.Vector3();
 
+  // quality knobs (used by degradation ladder)
+  private particleScale = 1.0;
+  private maxItems = 120;
+
   constructor(private stationById: Map<StationId, Station>) {}
+
+  setQuality(q: { particleScale?: number; maxItems?: number }) {
+    if (typeof q.particleScale === 'number') this.particleScale = Math.max(0, Math.min(1, q.particleScale));
+    if (typeof q.maxItems === 'number') this.maxItems = Math.max(10, Math.floor(q.maxItems));
+  }
 
   tick(dt: number) {
     for (const it of this.items) {
@@ -72,6 +81,20 @@ export class FlowLayer {
         if (m?.dispose) m.dispose();
       });
     }
+    // enforce item budget (drop oldest non-rocket first)
+    while (alive.length > this.maxItems) {
+      const idx = alive.findIndex((x) => x.kind !== 'rocket');
+      const victim = alive.splice(idx >= 0 ? idx : 0, 1)[0];
+      if (!victim) break;
+      this.group.remove(victim.mesh);
+      victim.mesh.traverse((o) => {
+        const m = (o as any).material;
+        const g = (o as any).geometry;
+        if (g?.dispose) g.dispose();
+        if (m?.dispose) m.dispose();
+      });
+    }
+
     this.items = alive;
   }
 
@@ -82,7 +105,8 @@ export class FlowLayer {
   }
 
   spawnCrateBurst(from: StationId, to: StationId, n = 5) {
-    for (let i = 0; i < n; i++) {
+    const count = Math.max(0, Math.floor(n * this.particleScale));
+    for (let i = 0; i < count; i++) {
       const hue = 0x4aa3ff;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.9, 0.7, 0.7),
@@ -145,7 +169,8 @@ export class FlowLayer {
     const base = new THREE.Vector3(qa.group.position.x + 1.5, 1.1, qa.group.position.z - 2.7);
 
     const color = ok ? 0x7bffb2 : 0xff3b30;
-    for (let i = 0; i < 10; i++) {
+    const count = Math.max(0, Math.floor(10 * this.particleScale));
+    for (let i = 0; i < count; i++) {
       const s = new THREE.Mesh(
         new THREE.BoxGeometry(0.15, 0.15, 0.15),
         new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 })
