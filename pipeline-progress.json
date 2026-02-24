@@ -1,0 +1,77 @@
+{
+  "current": "Implement always-visible Status panel (Now working on / next / blockers / deploy+SHA / CI status / uptime / connection)",
+  "next": [
+    "Add /status + /roadmap endpoints in event-hub (machine-readable progress)",
+    "Wire status panel to event-hub + keep it updated (polling)",
+    "Display DoD gate in UI with ✅/🟡/❌ + evidence links"
+  ],
+  "blockers": [],
+  "dod": {
+    "items": [
+      {
+        "id": "reachable",
+        "title": "Reachable on LAN (UI :3010, hub :8080/health)",
+        "status": "partial",
+        "evidence": []
+      },
+      {
+        "id": "realtime",
+        "title": "Realtime (UI shows CONNECTED; /state updates within 2s)",
+        "status": "partial",
+        "evidence": []
+      },
+      {
+        "id": "persistence",
+        "title": "Persistence/reliability (auto-start on boot + predictable logs + one-command restart)",
+        "status": "not_done",
+        "evidence": []
+      },
+      {
+        "id": "github_min",
+        "title": "GitHub integration minimum (webhook signature verify; push/PR/workflow_run visible reactions)",
+        "status": "partial",
+        "evidence": []
+      },
+      {
+        "id": "ci_green",
+        "title": "CI green on main",
+        "status": "partial",
+        "evidence": []
+      }
+    ]
+  },
+  "roadmap": {
+    "items": [
+      {
+        "id": "status_panel",
+        "priority": "P0",
+        "title": "Always-visible Status panel (Now/Next/Blockers/Deploy/CI/Uptime/Conn)",
+        "status": "partial"
+      },
+      {
+        "id": "status_api",
+        "priority": "P0",
+        "title": "Event-hub /status + /roadmap endpoints",
+        "status": "partial"
+      },
+      {
+        "id": "dod_gate",
+        "priority": "P0",
+        "title": "DoD gate displayed in UI (✅/🟡/❌ + evidence links)",
+        "status": "partial"
+      },
+      {
+        "id": "deploy_stamp",
+        "priority": "P1",
+        "title": "Automatic deploy stamp (deployedAt + sha populated)",
+        "status": "not_done"
+      },
+      {
+        "id": "ci_to_events",
+        "priority": "P1",
+        "title": "CI status mapped into event stream + shown in Status panel",
+        "status": "partial"
+      }
+    ]
+  }
+}

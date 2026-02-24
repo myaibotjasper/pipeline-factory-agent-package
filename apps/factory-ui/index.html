@@ -7,10 +7,17 @@
     <style>
       html, body { margin: 0; height: 100%; background: #070A12; color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
       #app { position: relative; width: 100%; height: 100%; overflow: hidden; }
-      #hud { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; pointer-events: none; }
+      #hud { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; pointer-events: none; }
       .pill { pointer-events: none; padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(8px); }
       .kpis { display: flex; gap: 10px; flex-wrap: wrap; }
       .small { opacity: 0.85; font-size: 12px; }
+      .tiny { opacity: 0.8; font-size: 11px; }
+      #status { width: min(520px, 60vw); }
+      #status .row { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
+      #status .label { opacity: 0.75; font-size: 11px; }
+      #status ul { margin: 6px 0 0 18px; padding: 0; }
+      #status li { margin: 2px 0; }
+      a { color: #b6d8ff; text-decoration: none; pointer-events: auto; }
       canvas { display: block; }
     </style>
   </head>
@@ -18,6 +25,20 @@
     <div id="app">
       <div id="hud">
         <div class="pill">PipelineFactory</div>
+        <div class="pill small" id="status">
+          <div class="row"><span class="label">Now working on</span> <span id="now">-</span></div>
+          <div class="row tiny"><span class="label">Deploy</span> <span id="deploy">-</span></div>
+          <div class="row tiny"><span class="label">CI</span> <span id="ci">-</span></div>
+          <div class="row tiny"><span class="label">DoD</span> <span id="dod">-</span></div>
+          <div class="tiny" id="nextWrap" style="margin-top:6px; display:none;">
+            <div class="label">Next</div>
+            <ul id="next"></ul>
+          </div>
+          <div class="tiny" id="blockersWrap" style="margin-top:6px; display:none;">
+            <div class="label">Blockers</div>
+            <ul id="blockers"></ul>
+          </div>
+        </div>
         <div class="kpis pill" id="kpis"></div>
         <div class="pill small" id="conn">CONNECTING</div>
       </div>
