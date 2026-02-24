@@ -1,0 +1,55 @@
+# Recommended repo structure (monorepo)
+
+pipeline-factory/
+  apps/
+    event-hub/
+      src/
+        index.ts
+        github/
+          verifySignature.ts
+          normalize.ts
+        state/
+          store.ts
+          kpi.ts
+        ws/
+          server.ts
+      package.json
+      tsconfig.json
+
+    factory-ui/
+      src/
+        main.ts
+        net/
+          EventStream.ts
+        state/
+          FactoryState.ts
+        scene/
+          SceneBootstrap.ts
+          FactoryWorld.ts
+          zones/
+            ReceivingDock.ts
+            BlueprintLoft.ts
+            AssemblyLine.ts
+            QAGate.ts
+            LaunchBay.ts
+            ControlRoom.ts
+          characters/
+            RobotController.ts
+            roles/
+              ScannerBot.ts
+              ArchitectBot.ts
+              BuilderBot.ts
+              InspectorBot.ts
+              PilotBot.ts
+              ForemanBot.ts
+        ui/
+          modes/
+            wallboard.ts
+            laptop.ts
+            mobile.ts
+      public/
+        assets/
+          models/
+          textures/
+      package.json
+      vite.config.ts

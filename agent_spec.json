@@ -1,0 +1,180 @@
+{
+  "project": {
+    "name": "PipelineFactory",
+    "version": "1.0.0",
+    "renderer": "threejs-webgl",
+    "style": "cute_robots",
+    "targets": ["wallboard", "laptop", "mobile"],
+    "host": "mac-mini-m4-24gb"
+  },
+
+  "backend": {
+    "service": "event-hub",
+    "stack": "nodejs-typescript",
+    "endpoints": {
+      "webhook_github": "/webhooks/github",
+      "get_state": "/state",
+      "health": "/health",
+      "ws": "/ws"
+    },
+    "security": {
+      "github_webhook_secret_env": "GITHUB_WEBHOOK_SECRET",
+      "signature_header": "X-Hub-Signature-256"
+    },
+    "replay_buffer": {
+      "enabled": true,
+      "max_events": 300
+    }
+  },
+
+  "schema": {
+    "event": {
+      "required_fields": ["id", "ts", "source", "org", "repo", "type", "status", "entity"],
+      "enums": {
+        "type": [
+          "CODE_PUSHED",
+          "PR_OPENED",
+          "PR_UPDATED",
+          "PR_CLOSED",
+          "CI_STARTED",
+          "CI_COMPLETED",
+          "RELEASE_PUBLISHED",
+          "HEARTBEAT"
+        ],
+        "status": ["info", "success", "failure", "warning"],
+        "station_hint": [
+          "RECEIVING_DOCK",
+          "BLUEPRINT_LOFT",
+          "ASSEMBLY_LINE",
+          "QA_GATE",
+          "LAUNCH_BAY",
+          "CONTROL_ROOM"
+        ]
+      }
+    },
+
+    "state_snapshot": {
+      "kpis": ["open_prs", "failing_checks", "last_release", "avg_ci_duration_ms"],
+      "module_fields": ["key", "title", "url", "status", "zone", "updated_ts"]
+    }
+  },
+
+  "factory": {
+    "zones": [
+      {
+        "id": "RECEIVING_DOCK",
+        "label": "Receiving Dock",
+        "camera_anchor": "cam_dock",
+        "props": ["conveyor_A", "scanner_arch", "drone_drop"],
+        "bindings": [
+          { "when": { "type": "CODE_PUSHED" }, "do": "spawn_crate", "args": { "crate_kind": "code" } },
+          { "when": { "type": "PR_OPENED" }, "do": "spawn_crate", "args": { "crate_kind": "feature" } }
+        ]
+      },
+      {
+        "id": "BLUEPRINT_LOFT",
+        "label": "Blueprint Loft",
+        "camera_anchor": "cam_blueprint",
+        "props": ["holo_board", "stamp_station"],
+        "bindings": [
+          { "when": { "type": "PR_OPENED" }, "do": "crate_to_module", "args": { "module_kind": "feature_module" } },
+          { "when": { "type": "PR_UPDATED" }, "do": "update_module_label" }
+        ]
+      },
+      {
+        "id": "ASSEMBLY_LINE",
+        "label": "Assembly Line",
+        "camera_anchor": "cam_assembly",
+        "props": ["conveyor_B", "tool_racks", "parts_bins"],
+        "bindings": [
+          { "when": { "type": "CODE_PUSHED" }, "do": "weld_parts_burst", "args": { "intensity": "by_commit_count" } },
+          { "when": { "type": "CI_STARTED" }, "do": "pulse_build_activity" }
+        ]
+      },
+      {
+        "id": "QA_GATE",
+        "label": "QA Gate",
+        "camera_anchor": "cam_qa",
+        "props": ["scanner_tunnel", "fail_chute", "pass_gate"],
+        "bindings": [
+          { "when": { "type": "CI_STARTED" }, "do": "send_module_to_scanner" },
+          { "when": { "type": "CI_COMPLETED", "status": "success" }, "do": "pass_gate_green" },
+          { "when": { "type": "CI_COMPLETED", "status": "failure" }, "do": "fail_buzz_red_and_rework" }
+        ]
+      },
+      {
+        "id": "LAUNCH_BAY",
+        "label": "Launch Bay",
+        "camera_anchor": "cam_launch",
+        "props": ["packaging_table", "launch_rail", "production_city_backdrop"],
+        "bindings": [
+          { "when": { "type": "RELEASE_PUBLISHED" }, "do": "package_and_launch" }
+        ]
+      },
+      {
+        "id": "CONTROL_ROOM",
+        "label": "Control Room",
+        "camera_anchor": "cam_control",
+        "props": ["kpi_wall_panels", "status_lights"],
+        "bindings": [
+          { "when": { "type": "CI_COMPLETED", "status": "failure" }, "do": "set_mode_incident" },
+          { "when": { "type": "RELEASE_PUBLISHED" }, "do": "set_mode_celebration" },
+          { "when": { "type": "HEARTBEAT" }, "do": "set_mode_normal_if_no_recent_failures" }
+        ]
+      }
+    ],
+
+    "characters": [
+      { "id": "scanner_bot", "role": "Ingestion", "home_zone": "RECEIVING_DOCK",
+        "rig": "robot_base_rig_v1", "variant": { "head": "round_led", "prop": "tablet_scanner" },
+        "clips": { "idle": "scanner_idle_loop", "work": "scan_and_stamp_loop", "success": "happy_beep", "failure": "confused_shrug" }
+      },
+      { "id": "architect_bot", "role": "Planning", "home_zone": "BLUEPRINT_LOFT",
+        "rig": "robot_base_rig_v1", "variant": { "head": "visor_led", "prop": "holo_projector" },
+        "clips": { "idle": "holo_idle_loop", "work": "arrange_blueprints_loop", "success": "approve_stamp", "failure": "reject_stamp" }
+      },
+      { "id": "builder_bot", "role": "Engineering", "home_zone": "ASSEMBLY_LINE", "count": 6,
+        "rig": "robot_base_rig_v1", "variant": { "head": "square_led", "prop": "welder_tool" },
+        "clips": { "idle": "tool_idle_loop", "work": "weld_loop", "success": "tiny_dance", "failure": "sparks_oops" }
+      },
+      { "id": "inspector_bot", "role": "QA", "home_zone": "QA_GATE",
+        "rig": "robot_base_rig_v1", "variant": { "head": "mono_eye", "prop": "scanner_beam" },
+        "clips": { "idle": "inspect_idle_loop", "work": "scan_loop", "success": "green_check_pose", "failure": "red_buzzer_pose" }
+      },
+      { "id": "pilot_bot", "role": "Release", "home_zone": "LAUNCH_BAY",
+        "rig": "robot_base_rig_v1", "variant": { "head": "antenna", "prop": "launch_lever" },
+        "clips": { "idle": "pilot_idle_loop", "work": "countdown_and_launch", "success": "salute", "failure": "retry_panicked" }
+      },
+      { "id": "foreman_bot", "role": "Orchestrator", "home_zone": "CONTROL_ROOM",
+        "rig": "robot_base_rig_v1", "variant": { "head": "boss_crown_led", "prop": "pointer_baton" },
+        "clips": { "idle": "foreman_idle_loop", "work": "point_and_direct", "success": "thumbs_up_big", "failure": "siren_mode_pose" }
+      }
+    ],
+
+    "ui_modes": {
+      "wallboard": {
+        "camera": "tour_loop",
+        "tour_stops": ["RECEIVING_DOCK","BLUEPRINT_LOFT","ASSEMBLY_LINE","QA_GATE","LAUNCH_BAY","CONTROL_ROOM"],
+        "stop_seconds": 8,
+        "overlay_kpis": ["open_prs","failing_checks","last_release","avg_ci_duration_ms"],
+        "interaction": "none"
+      },
+      "laptop": {
+        "camera": "free_orbit_with_snap",
+        "overlay": ["station_status","recent_events","selected_pr_details"],
+        "interaction": ["click_station_zoom","click_module_details","filter_repo"]
+      },
+      "mobile": {
+        "camera": "station_swipe",
+        "overlay": ["station_status","recent_events_compact"],
+        "interaction": ["swipe_stations","tap_module"]
+      }
+    },
+
+    "performance_budgets": {
+      "wallboard": { "target_fps": 60, "max_draw_calls": 250, "max_visible_robots": 40 },
+      "laptop": { "target_fps": 60, "max_draw_calls": 150, "max_visible_robots": 25 },
+      "mobile": { "target_fps": 30, "max_draw_calls": 100, "max_visible_robots": 12 }
+    }
+  }
+}
