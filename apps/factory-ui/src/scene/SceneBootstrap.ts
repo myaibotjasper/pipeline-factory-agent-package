@@ -3,8 +3,11 @@ import { FactoryWorld, type StationId } from './FactoryWorld';
 import { CameraRig } from './controls/CameraRig';
 import { ModuleLayer } from './ModuleLayer';
 import { FlowLayer } from './FlowLayer';
+import type { UIMode } from '../ui/modes/mode';
+import { RobotController } from './robots/RobotController';
+import { ROBOT_SPECS } from './robots/RobotSpecs';
 
-export function bootScene(container: HTMLElement) {
+export function bootScene(container: HTMLElement, mode: UIMode) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setClearColor('#070A12');
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -36,6 +39,10 @@ export function bootScene(container: HTMLElement) {
 
   const flow = new FlowLayer(world.stationById);
   scene.add(flow.group);
+
+  const maxVisibleRobots = mode === 'mobile' ? 12 : mode === 'laptop' ? 25 : 40;
+  const robots = new RobotController({ stationById: world.stationById, mode, maxVisibleRobots, specs: ROBOT_SPECS });
+  scene.add(robots.group);
 
   // modules live near blueprint loft
   const blueprint = world.stationById.get('BLUEPRINT_LOFT');
@@ -81,6 +88,7 @@ export function bootScene(container: HTMLElement) {
 
     rig.tick(dt);
     flow.tick(dt);
+    robots.tick(dt);
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
@@ -91,6 +99,7 @@ export function bootScene(container: HTMLElement) {
     rig,
     world,
     moduleLayer,
+    robots,
     onPointer(ev: PointerEvent) {
       return pickStation(ev);
     },

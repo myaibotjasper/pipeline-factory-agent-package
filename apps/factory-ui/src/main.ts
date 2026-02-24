@@ -14,9 +14,8 @@ const feedEl = document.getElementById('feed')!;
 const overlayEl = document.getElementById('overlay')!;
 
 const state = new FactoryState();
-const scene = bootScene(app);
-
 const mode = detectMode();
+const scene = bootScene(app, mode);
 
 function renderKpis() {
   const k = state.kpis;
@@ -158,6 +157,8 @@ connectEventStream({
     state.applyEvent(ev);
     renderKpis();
     renderFeed();
+
+    scene.robots.onEvent(ev);
 
     // keep module layer in sync (cheap: refresh from hub periodically would be better; for MVP we refetch snapshot)
     if (ev.type.startsWith('PR_') || ev.type === 'RELEASE_PUBLISHED') {
