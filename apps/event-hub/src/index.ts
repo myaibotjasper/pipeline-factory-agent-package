@@ -17,11 +17,25 @@ app.use(cors());
 // raw body capture for signature verification
 app.use(
   express.json({
+    limit: '1mb',
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     },
   })
 );
+
+// handle invalid json
+app.use((err: any, _req: any, res: any, next: any) => {
+  if (err && err.type === 'entity.too.large') {
+    res.status(413).json({ ok: false });
+    return;
+  }
+  if (err) {
+    res.status(400).json({ ok: false });
+    return;
+  }
+  next();
+});
 
 const store = new Store(300);
 

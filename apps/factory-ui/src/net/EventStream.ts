@@ -19,6 +19,14 @@ export function connectEventStream(opts: {
   const { wsUrl, onStatus, onEvent } = opts;
   let ws: WebSocket | null = null;
   let stopped = false;
+  let attempt = 0;
+
+  function nextDelayMs() {
+    // 0.5s → 8s exponential with jitter
+    const base = Math.min(8000, 500 * Math.pow(2, attempt));
+    const jitter = base * (0.2 * Math.random());
+    return Math.round(base + jitter);
+  }
 
   function start() {
     onStatus('connecting');
@@ -26,23 +34,30 @@ export function connectEventStream(opts: {
       ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         if (stopped) return;
+        attempt = 0;
         onStatus('connected');
       };
       ws.onclose = () => {
         if (stopped) return;
         onStatus('disconnected');
-        // reconnect
-        setTimeout(() => start(), 1000);
+        attempt += 1;
+        setTimeout(() => start(), nextDelayMs());
       };
       ws.onerror = () => {
         if (stopped) return;
         onStatus('disconnected');
+        try {
+          ws?.close();
+        } catch {}
       };
       ws.onmessage = (msg) => {
         if (stopped) return;
         try {
           const data = JSON.parse(String(msg.data));
           if (data?.type === 'hello') return;
+          // minimal shape validation
+          if (!data || typeof data !== 'object') return;
+          if (typeof data.type !== 'string' || typeof data.ts !== 'number') return;
           onEvent(data);
         } catch {
           // ignore
@@ -50,6 +65,8 @@ export function connectEventStream(opts: {
       };
     } catch {
       onStatus('disconnected');
+      attempt += 1;
+      setTimeout(() => start(), nextDelayMs());
     }
   }
 
