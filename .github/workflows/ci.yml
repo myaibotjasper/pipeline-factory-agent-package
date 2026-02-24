@@ -6,21 +6,28 @@ on:
   pull_request:
 
 jobs:
-  lint-spec:
+  validate-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate JSON spec files
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate JSON specs
         run: |
-          python - <<'PY'
-          import json,sys,glob
-          paths = [
-            'agent_spec.json',
-            'spec/agent_spec.json',
-          ]
-          for p in paths:
-            with open(p,'r',encoding='utf-8') as f:
-              json.load(f)
-            print('ok', p)
-          PY
+          node - <<'NODE'
+          const fs = require('fs');
+          for (const p of ['agent_spec.json', 'spec/agent_spec.json']) {
+            JSON.parse(fs.readFileSync(p, 'utf8'));
+            console.log('ok', p);
+          }
+          NODE
+
+      - name: Install
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run build
