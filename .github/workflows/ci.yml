@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+
+jobs:
+  lint-spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON spec files
+        run: |
+          python - <<'PY'
+          import json,sys,glob
+          paths = [
+            'agent_spec.json',
+            'spec/agent_spec.json',
+          ]
+          for p in paths:
+            with open(p,'r',encoding='utf-8') as f:
+              json.load(f)
+            print('ok', p)
+          PY
