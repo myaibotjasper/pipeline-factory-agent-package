@@ -47,10 +47,11 @@ fetch(`${hubHttp}/state`, { cache: 'no-store' })
   .then((r) => (r.ok ? r.json() : null))
   .then((snap) => {
     if (!snap) return;
-    if (Array.isArray(snap.recent)) {
-      for (const ev of snap.recent) state.applyEvent(ev);
-      renderKpis();
-      renderFeed();
+    state.applySnapshot(snap);
+    renderKpis();
+    renderFeed();
+    if (Array.isArray(snap.modules)) {
+      scene.moduleLayer.upsertMany(snap.modules);
     }
   })
   .catch(() => {});
@@ -69,10 +70,48 @@ if (mode === 'wallboard') {
 
 // Laptop/mobile interaction
 let selectedStation: string | null = null;
+const prCardEl = document.createElement('div');
+prCardEl.className = 'pill';
+prCardEl.style.position = 'absolute';
+prCardEl.style.right = '12px';
+prCardEl.style.bottom = '12px';
+prCardEl.style.width = 'min(460px, 92vw)';
+prCardEl.style.display = 'none';
+prCardEl.style.pointerEvents = 'auto';
+prCardEl.innerHTML = '';
+document.body.appendChild(prCardEl);
+
+function showPrCard(m: any) {
+  if (!m) {
+    prCardEl.style.display = 'none';
+    return;
+  }
+  const title = m.title || m.key;
+  const url = m.url;
+  prCardEl.innerHTML = `
+    <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline;">
+      <div style="font-weight:700;">PR</div>
+      <div class="small" style="opacity:0.8;">${m.status?.toUpperCase?.() || ''}</div>
+    </div>
+    <div style="margin-top:6px;">${title}</div>
+    ${url ? `<div class="small" style="margin-top:6px;"><a href="${url}" target="_blank" rel="noreferrer">open on GitHub</a></div>` : ''}
+  `;
+  prCardEl.style.display = '';
+}
+
 window.addEventListener(
   'pointerdown',
   (ev) => {
     if (mode === 'wallboard') return;
+
+    // module click (laptop/mobile)
+    const modKey = scene.pickModule(ev);
+    if (modKey) {
+      const m = (state.modules || []).find((x) => x.key === modKey);
+      showPrCard(m);
+      return;
+    }
+
     const st = scene.onPointer(ev);
     if (!st) return;
     selectedStation = st;
@@ -120,7 +159,19 @@ connectEventStream({
     renderKpis();
     renderFeed();
 
-    if (tour) tour.tick(0); // no-op; tour ticks in RAF (below)
+    // keep module layer in sync (cheap: refresh from hub periodically would be better; for MVP we refetch snapshot)
+    if (ev.type.startsWith('PR_') || ev.type === 'RELEASE_PUBLISHED') {
+      fetch(`${hubHttp}/state`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((snap) => {
+          if (!snap) return;
+          if (Array.isArray(snap.modules)) {
+            state.modules = snap.modules;
+            scene.moduleLayer.upsertMany(snap.modules);
+          }
+        })
+        .catch(() => {});
+    }
 
     if (ev.station_hint) {
       const ok = ev.status !== 'failure';

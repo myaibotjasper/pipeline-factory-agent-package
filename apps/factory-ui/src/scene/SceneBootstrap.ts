@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FactoryWorld, type StationId } from './FactoryWorld';
 import { CameraRig } from './controls/CameraRig';
+import { ModuleLayer } from './ModuleLayer';
 
 export function bootScene(container: HTMLElement) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,6 +32,13 @@ export function bootScene(container: HTMLElement) {
   scene.add(floor);
 
   const world = new FactoryWorld(scene);
+
+  // modules live near blueprint loft
+  const blueprint = world.stationById.get('BLUEPRINT_LOFT');
+  const moduleLayer = new ModuleLayer(
+    blueprint ? new THREE.Vector3(blueprint.group.position.x, 0, blueprint.group.position.z + 4) : new THREE.Vector3(0, 0, 0)
+  );
+  scene.add(moduleLayer.group);
 
   const ray = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
@@ -77,8 +85,16 @@ export function bootScene(container: HTMLElement) {
     camera,
     rig,
     world,
+    moduleLayer,
     onPointer(ev: PointerEvent) {
       return pickStation(ev);
+    },
+    pickModule(ev: PointerEvent) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -(((ev.clientY - rect.top) / rect.height) * 2 - 1);
+      ray.setFromCamera(mouse, camera);
+      return moduleLayer.pick(ray);
     },
     flashStation(id: StationId, ok: boolean) {
       world.flashStation(id, ok);

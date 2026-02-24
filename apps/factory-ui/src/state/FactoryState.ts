@@ -7,9 +7,28 @@ export type KPI = {
   avg_ci_duration_ms: number | null;
 };
 
+export type Module = {
+  key: string;
+  title?: string;
+  url?: string;
+  status: 'info' | 'success' | 'failure' | 'warning';
+  zone?: string;
+  updated_ts: number;
+};
+
 export class FactoryState {
   kpis: KPI = { open_prs: 0, failing_checks: 0, last_release: null, avg_ci_duration_ms: null };
   recent: CanonicalEvent[] = [];
+  modules: Module[] = [];
+
+  applySnapshot(snap: any) {
+    if (snap?.kpis) this.kpis = snap.kpis;
+    if (Array.isArray(snap?.modules)) this.modules = snap.modules;
+    if (Array.isArray(snap?.recent)) {
+      this.recent = [];
+      for (const ev of snap.recent) this.applyEvent(ev);
+    }
+  }
 
   applyEvent(ev: CanonicalEvent) {
     this.recent.push(ev);
