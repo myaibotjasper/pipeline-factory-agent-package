@@ -116,6 +116,7 @@ renderFeed();
 const hubHost = import.meta.env.VITE_HUB_HOST || window.location.hostname;
 const hubHttp = import.meta.env.VITE_HUB_HTTP_BASE || `http://${hubHost}:8080`;
 const hubWs = import.meta.env.VITE_HUB_WS_URL || `ws://${hubHost}:8080/ws`;
+const hubSse = import.meta.env.VITE_HUB_SSE_URL || `http://${hubHost}:8080/sse`;
 
 // Fetch initial snapshot
 fetch(`${hubHttp}/state`, { cache: 'no-store' })
@@ -224,80 +225,131 @@ if (mode === 'mobile') {
   );
 }
 
+let sse: EventSource | null = null;
+let sseStarted = false;
+
+function startSseFallback() {
+  if (sseStarted) return;
+  sseStarted = true;
+  try {
+    sse = new EventSource(hubSse);
+    setConn(connEl, 'connected');
+    setDisconnectedOverlay(overlayEl, false);
+
+    sse.addEventListener('snapshot', (e: any) => {
+      try {
+        const snap = JSON.parse(String(e.data));
+        if (Array.isArray(snap.recent)) {
+          for (const ev of snap.recent) state.applyEvent(ev);
+        }
+        if (Array.isArray(snap.modules)) {
+          state.modules = snap.modules;
+          scene.moduleLayer.upsertMany(snap.modules);
+        }
+        renderKpis();
+        renderStations();
+        renderFeed();
+      } catch {}
+    });
+
+    sse.addEventListener('event', (e: any) => {
+      try {
+        const ev = JSON.parse(String(e.data));
+        handleEvent(ev);
+      } catch {}
+    });
+
+    sse.onerror = () => {
+      setConn(connEl, 'disconnected');
+      setDisconnectedOverlay(overlayEl, true);
+    };
+  } catch {
+    setConn(connEl, 'disconnected');
+    setDisconnectedOverlay(overlayEl, true);
+  }
+}
+
+function handleEvent(ev: any) {
+  state.applyEvent(ev);
+  renderKpis();
+  renderStations();
+  renderFeed();
+
+  scene.robots.onEvent(ev);
+
+  // lighting modes
+  if (ev.type === 'CI_COMPLETED' && ev.status === 'failure') {
+    setLighting('incident', 12000);
+  } else if (ev.type === 'RELEASE_PUBLISHED') {
+    setLighting('celebration', 15000);
+  } else if (ev.type === 'CI_COMPLETED' && ev.status === 'success') {
+    // settle back to normal quickly after a good run
+    setLighting('normal', 0);
+  }
+
+  // keep module layer in sync (cheap: refresh from hub periodically would be better; for MVP we refetch snapshot)
+  if (!sseStarted && (ev.type.startsWith('PR_') || ev.type === 'RELEASE_PUBLISHED')) {
+    fetch(`${hubHttp}/state`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((snap) => {
+        if (!snap) return;
+        if (Array.isArray(snap.modules)) {
+          state.modules = snap.modules;
+          renderStations();
+          scene.moduleLayer.upsertMany(snap.modules);
+        }
+      })
+      .catch(() => {});
+  }
+
+  // event-driven routing (greybox)
+  if (ev.type === 'CODE_PUSHED') {
+    const n = Math.min(10, Math.max(3, Number((ev.meta as any)?.commit_count ?? 5)));
+    scene.flow.spawnCrateBurst('RECEIVING_DOCK', 'ASSEMBLY_LINE', n);
+  }
+
+  if (ev.type === 'PR_OPENED' || ev.type === 'PR_UPDATED') {
+    scene.flow.routeModule('RECEIVING_DOCK', 'BLUEPRINT_LOFT', ev.status);
+  }
+
+  if (ev.type === 'PR_CLOSED') {
+    const merged = !!(ev.meta as any)?.merged;
+    if (merged) scene.flow.routeModule('BLUEPRINT_LOFT', 'LAUNCH_BAY', 'success');
+  }
+
+  if (ev.type === 'CI_STARTED') {
+    scene.flow.routeModule('ASSEMBLY_LINE', 'QA_GATE', 'info');
+  }
+
+  if (ev.type === 'CI_COMPLETED') {
+    const ok = ev.status === 'success';
+    scene.flow.qaResult(ok);
+    if (ok) scene.flow.routeModule('QA_GATE', 'LAUNCH_BAY', ev.status);
+    else scene.flow.routeModule('QA_GATE', 'ASSEMBLY_LINE', 'failure');
+  }
+
+  if (ev.type === 'RELEASE_PUBLISHED') {
+    scene.flow.launchRocket();
+  }
+
+  if (ev.station_hint) {
+    const ok = ev.status !== 'failure';
+    scene.flashStation(ev.station_hint as any, ok);
+  }
+}
+
 connectEventStream({
   wsUrl: hubWs,
   onStatus: (s) => {
     setConn(connEl, s);
     setDisconnectedOverlay(overlayEl, s !== 'connected');
-  },
-  onEvent: (ev) => {
-    state.applyEvent(ev);
-    renderKpis();
-    renderStations();
-    renderFeed();
 
-    scene.robots.onEvent(ev);
-
-    // lighting modes
-    if (ev.type === 'CI_COMPLETED' && ev.status === 'failure') {
-      setLighting('incident', 12000);
-    } else if (ev.type === 'RELEASE_PUBLISHED') {
-      setLighting('celebration', 15000);
-    } else if (ev.type === 'CI_COMPLETED' && ev.status === 'success') {
-      // settle back to normal quickly after a good run
-      setLighting('normal', 0);
-    }
-
-    // keep module layer in sync (cheap: refresh from hub periodically would be better; for MVP we refetch snapshot)
-    if (ev.type.startsWith('PR_') || ev.type === 'RELEASE_PUBLISHED') {
-      fetch(`${hubHttp}/state`, { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((snap) => {
-          if (!snap) return;
-          if (Array.isArray(snap.modules)) {
-            state.modules = snap.modules;
-            renderStations();
-            scene.moduleLayer.upsertMany(snap.modules);
-          }
-        })
-        .catch(() => {});
-    }
-
-    // event-driven routing (greybox)
-    if (ev.type === 'CODE_PUSHED') {
-      const n = Math.min(10, Math.max(3, Number((ev.meta as any)?.commit_count ?? 5)));
-      scene.flow.spawnCrateBurst('RECEIVING_DOCK', 'ASSEMBLY_LINE', n);
-    }
-
-    if (ev.type === 'PR_OPENED' || ev.type === 'PR_UPDATED') {
-      scene.flow.routeModule('RECEIVING_DOCK', 'BLUEPRINT_LOFT', ev.status);
-    }
-
-    if (ev.type === 'PR_CLOSED') {
-      const merged = !!(ev.meta as any)?.merged;
-      if (merged) scene.flow.routeModule('BLUEPRINT_LOFT', 'LAUNCH_BAY', 'success');
-    }
-
-    if (ev.type === 'CI_STARTED') {
-      scene.flow.routeModule('ASSEMBLY_LINE', 'QA_GATE', 'info');
-    }
-
-    if (ev.type === 'CI_COMPLETED') {
-      const ok = ev.status === 'success';
-      scene.flow.qaResult(ok);
-      if (ok) scene.flow.routeModule('QA_GATE', 'LAUNCH_BAY', ev.status);
-      else scene.flow.routeModule('QA_GATE', 'ASSEMBLY_LINE', 'failure');
-    }
-
-    if (ev.type === 'RELEASE_PUBLISHED') {
-      scene.flow.launchRocket();
-    }
-
-    if (ev.station_hint) {
-      const ok = ev.status !== 'failure';
-      scene.flashStation(ev.station_hint as any, ok);
+    if (s === 'disconnected') {
+      // If WS is blocked (common on some mobile networks), fall back to SSE.
+      setTimeout(() => startSseFallback(), 1200);
     }
   },
+  onEvent: (ev) => handleEvent(ev),
 });
 
 // tick: tour

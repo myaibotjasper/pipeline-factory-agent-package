@@ -32,6 +32,10 @@ export function makeWsServer(opts: {
       // @ts-ignore
       if (client.readyState === 1) client.send(msg);
     }
+
+    // Also emit for SSE subscribers.
+    // @ts-ignore
+    wss.emit('pf:event', ev);
   }
 
   return { wss, broadcast };

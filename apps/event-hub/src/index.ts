@@ -42,6 +42,29 @@ const store = new Store(300);
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/state', (_req, res) => res.json(store.snapshot()));
 
+// SSE fallback for clients where WebSocket is blocked.
+app.get('/sse', (req, res) => {
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  // initial snapshot
+  res.write(`event: snapshot\ndata: ${JSON.stringify(store.snapshot())}\n\n`);
+
+  const onEvent = (ev: any) => {
+    res.write(`event: event\ndata: ${JSON.stringify(ev)}\n\n`);
+  };
+
+  ws.wss.on('pf:event', onEvent);
+
+  req.on('close', () => {
+    ws.wss.off('pf:event', onEvent);
+    res.end();
+  });
+});
+
 app.post('/webhooks/github', (req: any, res) => {
   const sig = req.header('X-Hub-Signature-256');
   const rawBody: Buffer = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
